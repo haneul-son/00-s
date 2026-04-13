@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>심플 계산기 - 전문가 검토 버전</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+        }
+
+        .calc-button {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .calc-button:active {
+            transform: scale(0.95);
+            filter: brightness(1.2);
+        }
+
+        .display-container {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            min-height: 140px;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 에러 애니메이션 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake { animation: shake 0.2s ease-in-out 0s 2; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="calc-shell" class="w-full max-w-md bg-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-700">
+        <!-- 결과창 영역 -->
+        <div class="display-container p-8 flex flex-col justify-end items-end gap-1 overflow-hidden relative">
+            <div id="error-toast" class="absolute top-4 left-0 right-0 text-center opacity-0 transition-opacity duration-300">
+                <span class="bg-rose-500/20 text-rose-400 text-xs px-3 py-1 rounded-full border border-rose-500/30">안내: 0으로 나눌 수 없습니다</span>
+            </div>
+            <div id="previous-operand" class="text-slate-400 text-lg font-medium h-7 truncate w-full text-right no-scrollbar overflow-x-auto"></div>
+            <div id="current-operand" class="text-white text-6xl font-semibold truncate w-full text-right no-scrollbar overflow-x-auto">0</div>
+        </div>
+
+        <!-- 버튼 영역 -->
+        <div class="p-6 grid grid-cols-4 gap-4">
+            <button onclick="clearAll()" class="calc-button col-span-2 bg-slate-700 hover:bg-slate-600 text-cyan-400 font-bold py-5 rounded-2xl text-xl">AC</button>
+            <button onclick="deleteDigit()" class="calc-button bg-slate-700 hover:bg-slate-600 text-rose-400 font-bold py-5 rounded-2xl text-xl">DEL</button>
+            <button onclick="appendOperator('÷')" class="calc-button bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-5 rounded-2xl text-2xl">÷</button>
+
+            <button onclick="appendNumber('7')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">7</button>
+            <button onclick="appendNumber('8')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">8</button>
+            <button onclick="appendNumber('9')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">9</button>
+            <button onclick="appendOperator('×')" class="calc-button bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-5 rounded-2xl text-2xl">×</button>
+
+            <button onclick="appendNumber('4')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">4</button>
+            <button onclick="appendNumber('5')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">5</button>
+            <button onclick="appendNumber('6')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">6</button>
+            <button onclick="appendOperator('-')" class="calc-button bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-5 rounded-2xl text-2xl">-</button>
+
+            <button onclick="appendNumber('1')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">1</button>
+            <button onclick="appendNumber('2')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">2</button>
+            <button onclick="appendNumber('3')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">3</button>
+            <button onclick="appendOperator('+')" class="calc-button bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-5 rounded-2xl text-2xl">+</button>
+
+            <button onclick="appendNumber('0')" class="calc-button col-span-2 bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">0</button>
+            <button onclick="appendNumber('.')" class="calc-button bg-slate-700 hover:bg-slate-600 text-white font-medium py-5 rounded-2xl text-2xl">.</button>
+            <button onclick="compute()" class="calc-button bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-5 rounded-2xl text-2xl">=</button>
+        </div>
+    </div>
+
+    <script>
+        let currentOperand = '0';
+        let previousOperand = '';
+        let operation = null;
+        let shouldResetDisplay = false;
+
+        const currentDisplay = document.getElementById('current-operand');
+        const previousDisplay = document.getElementById('previous-operand');
+        const errorToast = document.getElementById('error-toast');
+        const calcShell = document.getElementById('calc-shell');
+
+        function appendNumber(number) {
+            if (number === '.' && currentOperand.includes('.')) return;
+            if (currentOperand === '0' || shouldResetDisplay) {
+                currentOperand = number === '.' ? '0.' : number;
+                shouldResetDisplay = false;
+            } else {
+                currentOperand = currentOperand.toString() + number.toString();
+            }
+            updateDisplay();
+        }
+
+        function appendOperator(op) {
+            if (currentOperand === '' && previousOperand === '') return;
+            if (previousOperand !== '' && !shouldResetDisplay) {
+                compute();
+            }
+            operation = op;
+            previousOperand = currentOperand;
+            shouldResetDisplay = true; 
+            updateDisplay();
+        }
+
+        function clearAll() {
+            currentOperand = '0';
+            previousOperand = '';
+            operation = null;
+            shouldResetDisplay = false;
+            updateDisplay();
+        }
+
+        function deleteDigit() {
+            if (shouldResetDisplay) return;
+            currentOperand = currentOperand.toString().slice(0, -1);
+            if (currentOperand === '' || currentOperand === '-') currentOperand = '0';
+            updateDisplay();
+        }
+
+        function compute() {
+            let computation;
+            const prev = parseFloat(previousOperand);
+            const current = parseFloat(currentOperand);
+            
+            if (isNaN(prev) || isNaN(current)) return;
+
+            switch (operation) {
+                case '+': computation = prev + current; break;
+                case '-': computation = prev - current; break;
+                case '×': computation = prev * current; break;
+                case '÷':
+                    if (current === 0) {
+                        showError();
+                        return;
+                    }
+                    computation = prev / current;
+                    break;
+                default: return;
+            }
+
+            // 부동 소수점 오차 해결 (최대 12자리 정밀도)
+            currentOperand = parseFloat(computation.toFixed(12)).toString();
+            operation = null;
+            previousOperand = '';
+            shouldResetDisplay = true;
+            updateDisplay();
+        }
+
+        function showError() {
+            errorToast.style.opacity = '1';
+            calcShell.classList.add('shake');
+            setTimeout(() => {
+                errorToast.style.opacity = '0';
+                calcShell.classList.remove('shake');
+            }, 2000);
+            clearAll();
+        }
+
+        function formatNumber(number) {
+            if (number === 'Error') return 'Error';
+            const stringNumber = number.toString();
+            const parts = stringNumber.split('.');
+            const integerPart = parts[0];
+            const decimalPart = parts[1];
+            
+            let formattedInteger = parseFloat(integerPart).toLocaleString('en', { maximumFractionDigits: 0 });
+            
+            // 음수 0 처리 등 예외 처리
+            if (integerPart === '-0') formattedInteger = '-0';
+            if (integerPart === '' && stringNumber.startsWith('-')) formattedInteger = '-';
+
+            return decimalPart != null ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+        }
+
+        function updateDisplay() {
+            currentDisplay.innerText = formatNumber(currentOperand);
+            if (operation != null) {
+                previousDisplay.innerText = `${formatNumber(previousOperand)} ${operation}`;
+            } else {
+                previousDisplay.innerText = '';
+            }
+        }
+
+        window.addEventListener('keydown', e => {
+            if (e.key >= 0 && e.key <= 9) appendNumber(e.key);
+            if (e.key === '.') appendNumber(e.key);
+            if (e.key === '=' || e.key === 'Enter') compute();
+            if (e.key === 'Backspace') deleteDigit();
+            if (e.key === 'Escape') clearAll();
+            if (e.key === '+') appendOperator('+');
+            if (e.key === '-') appendOperator('-');
+            if (e.key === '*') appendOperator('×');
+            if (e.key === '/') {
+                e.preventDefault();
+                appendOperator('÷');
+            }
+        });
+    </script>
+</body>
+</html>
